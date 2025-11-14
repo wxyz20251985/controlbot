@@ -1,13 +1,16 @@
-# main.py - Sirul Member Control Bot (Fixed for Render Free Tier)
-# Non-async main + Flask for port scan + threading for polling
+# main.py - Sirul Member Control Bot (FREE 24/7 on Render)
+# Fixed: Flask + Telegram polling in separate thread (no asyncio error)
 
 import os
 import sqlite3
 import logging
-from datetime import date, datetime
-from typing import List
 import threading
 import time
+from datetime import date, datetime, timedelta
+from typing import List
+
+import nest_asyncio
+nest_asyncio.apply()  # Allows nested event loops
 
 from telegram import Update
 from telegram.ext import (
@@ -16,8 +19,8 @@ from telegram.ext import (
     MessageHandler,
     ContextTypes,
     filters,
-    JobQueue,
 )
+
 from flask import Flask
 
 # --- CONFIG ---
@@ -86,7 +89,7 @@ def delete_user(user_id: int, chat_id: int):
     conn.commit()
     conn.close()
 
-# --- DAILY CHECK ---
+# --- DAILY CHECK (00:05 UTC) ---
 async def daily_check(context: ContextTypes.DEFAULT_TYPE):
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
@@ -175,9 +178,8 @@ async def any_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     log.error("Error: %s", context.error)
 
-# --- MAIN (Non-Async for Render) ---
-def main():
-    init_db()
+# --- RUN BOT IN THREAD ---
+def run_bot():
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -191,27 +193,26 @@ def main():
         name="daily_inactivity_check"
     )
 
-    print("Bot is running! Add to any group as admin.")
+    print("Bot polling started in background...")
+    app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
 
-    # Start polling in thread (avoids asyncio loop error)
-    def run_polling():
-        app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
-
-    polling_thread = threading.Thread(target=run_polling, daemon=True)
-    polling_thread.start()
-
-    # Keep main thread alive
-    while True:
-        time.sleep(60)  # Sleep 1 min, keep alive
-
-# --- DUMMY FLASK SERVER FOR RENDER PORT SCAN ---
+# --- FLASK SERVER (Keeps Render Alive) ---
 flask_app = Flask(__name__)
 
 @flask_app.route('/', defaults={'path': ''})
 @flask_app.route('/<path:path>')
 def catch_all(path):
-    return "Bot is running!", 200
+    return "Bot is running! Sirul Member Control is LIVE.", 200
 
+# --- MAIN ---
 if __name__ == "__main__":
+    init_db()
+
+    # Start bot in background thread
+    bot_thread = threading.Thread(target=run_bot, daemon=True)
+    bot_thread.start()
+
+    # Start Flask server on Render port
     port = int(os.environ.get('PORT', 10000))
-    flask_app.run(host='0.0.0.0', port=port, debug=False)
+    print(f"Flask server starting on port {port}...")
+    flask_app.run(host='0.0.0.0', port=port, use_reloader=False)
