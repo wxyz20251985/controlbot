@@ -1,15 +1,13 @@
-# main.py - Sirul Member Control Bot (Free Render Web Service)
-# Fixes event loop + adds dummy HTTP server for port scan
+# main.py - Sirul Member Control Bot (Fixed for Render Free Tier)
+# Non-async main + Flask for port scan + threading for polling
 
 import os
 import sqlite3
-import asyncio
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import List
-
-import nest_asyncio
-nest_asyncio.apply()  # Fix: Allows nested event loops on Render/Python 3.13
+import threading
+import time
 
 from telegram import Update
 from telegram.ext import (
@@ -18,8 +16,8 @@ from telegram.ext import (
     MessageHandler,
     ContextTypes,
     filters,
+    JobQueue,
 )
-
 from flask import Flask
 
 # --- CONFIG ---
@@ -88,7 +86,7 @@ def delete_user(user_id: int, chat_id: int):
     conn.commit()
     conn.close()
 
-# --- DAILY CHECK (00:05 UTC) ---
+# --- DAILY CHECK ---
 async def daily_check(context: ContextTypes.DEFAULT_TYPE):
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
@@ -177,8 +175,8 @@ async def any_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     log.error("Error: %s", context.error)
 
-# --- MAIN ---
-async def main():
+# --- MAIN (Non-Async for Render) ---
+def main():
     init_db()
     app = Application.builder().token(BOT_TOKEN).build()
 
@@ -194,22 +192,26 @@ async def main():
     )
 
     print("Bot is running! Add to any group as admin.")
-    await app.run_polling(allowed_updates=Update.ALL_TYPES)
 
-# --- DUMMY FLASK SERVER FOR RENDER PORT SCAN (FREE WEB SERVICE) ---
-app_flask = Flask(__name__)
+    # Start polling in thread (avoids asyncio loop error)
+    def run_polling():
+        app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
 
-@app_flask.route('/', defaults={'path': ''})
-@app_flask.route('/<path:path>')
+    polling_thread = threading.Thread(target=run_polling, daemon=True)
+    polling_thread.start()
+
+    # Keep main thread alive
+    while True:
+        time.sleep(60)  # Sleep 1 min, keep alive
+
+# --- DUMMY FLASK SERVER FOR RENDER PORT SCAN ---
+flask_app = Flask(__name__)
+
+@flask_app.route('/', defaults={'path': ''})
+@flask_app.route('/<path:path>')
 def catch_all(path):
     return "Bot is running!", 200
 
 if __name__ == "__main__":
-    # Run bot in background thread
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(main())
-    
-    # Run Flask on Render port
     port = int(os.environ.get('PORT', 10000))
-    app_flask.run(host='0.0.0.0', port=port, debug=False)
+    flask_app.run(host='0.0.0.0', port=port, debug=False)
