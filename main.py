@@ -1,9 +1,10 @@
-# main.py - Sirul Member Control Bot (Fixed for Render Free Hobby - Flask + Simple Polling)
-# Flask binds to port 10000 first (passes scan) + Bot polling in main
+# main.py - Sirul Member Control Bot (Free Render Web Service - Hobby Tier)
+# Dummy Flask on port 10000 + Bot polling in thread
 
 import os
 import sqlite3
 import logging
+import threading
 from datetime import date, datetime
 from typing import List
 
@@ -21,7 +22,7 @@ from flask import Flask
 # --- CONFIG ---
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
-    raise ValueError("BOT_TOKEN not set! Add to Render Environment Variables.")
+    raise ValueError("BOT_TOKEN not set!")
 
 DB_FILE = "inactivity.db"
 
@@ -95,7 +96,7 @@ async def daily_check(context: ContextTypes.DEFAULT_TYPE):
     today = date.today()
 
     for chat_id in chat_ids:
-        if chat_id >= 0:  # Skip private chats
+        if chat_id >= 0:
             continue
 
         rows = get_all_in_chat(chat_id)
@@ -173,7 +174,7 @@ async def any_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     log.error("Error: %s", context.error)
 
-# --- FLASK SERVER (Binds to PORT 10000 FIRST) ---
+# --- FLASK DUMMY SERVER (Port 10000 for Render Scan) ---
 flask_app = Flask(__name__)
 
 @flask_app.route('/', defaults={'path': ''})
@@ -181,9 +182,8 @@ flask_app = Flask(__name__)
 def catch_all(path):
     return "Sirul Member Control Bot is LIVE!", 200
 
-# --- MAIN ---
-def main():
-    init_db()
+# --- MAIN (Flask + Bot in Thread) ---
+def run_bot():
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -197,19 +197,17 @@ def main():
         name="daily_inactivity_check"
     )
 
-    print("Bot is running! Add to any group as admin.")
-
-    # Start bot polling
-    app.run_polling(
-        allowed_updates=Update.ALL_TYPES,
-        drop_pending_updates=True,
-        read_timeout=10,
-        write_timeout=10,
-        connect_timeout=10,
-        pool_timeout=10
-    )
+    print("Bot polling started in background...")
+    app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
 
 if __name__ == "__main__":
+    init_db()
+
+    # Start bot in background thread
+    bot_thread = threading.Thread(target=run_bot, daemon=True)
+    bot_thread.start()
+
+    # Start Flask on Render port (passes scan)
     port = int(os.environ.get('PORT', 10000))
-    print(f"Starting Flask on port {port}...")
+    print(f"Flask starting on port {port}...")
     flask_app.run(host='0.0.0.0', port=port, debug=False)
