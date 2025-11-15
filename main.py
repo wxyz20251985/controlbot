@@ -1,11 +1,10 @@
-# main.py - Sirul Member Control Bot (FREE RENDER HOBBY)
-# Flask keeps port 10000 open + Bot runs in background
+# main.py - Sirul Member Control Bot (Fixed for Render Free Hobby - Flask + Simple Polling)
+# Flask binds to port 10000 first (passes scan) + Bot polling in main
 
 import os
 import sqlite3
 import logging
-import threading
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import List
 
 from telegram import Update
@@ -22,12 +21,15 @@ from flask import Flask
 # --- CONFIG ---
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
-    raise ValueError("BOT_TOKEN not set!")
+    raise ValueError("BOT_TOKEN not set! Add to Render Environment Variables.")
 
 DB_FILE = "inactivity.db"
 
 # --- LOGGING ---
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+)
 log = logging.getLogger(__name__)
 
 # --- DATABASE ---
@@ -82,7 +84,7 @@ def delete_user(user_id: int, chat_id: int):
     conn.commit()
     conn.close()
 
-# --- DAILY CHECK (00:05 EAT = 21:05 UTC) ---
+# --- DAILY CHECK (00:05 UTC) ---
 async def daily_check(context: ContextTypes.DEFAULT_TYPE):
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
@@ -93,7 +95,7 @@ async def daily_check(context: ContextTypes.DEFAULT_TYPE):
     today = date.today()
 
     for chat_id in chat_ids:
-        if chat_id >= 0:
+        if chat_id >= 0:  # Skip private chats
             continue
 
         rows = get_all_in_chat(chat_id)
@@ -104,7 +106,7 @@ async def daily_check(context: ContextTypes.DEFAULT_TYPE):
             last_msg = date.fromisoformat(last_msg_str)
             days_ago = (today - last_msg).days
 
-            # Warn on day 4
+            # Day 4: Warning
             if days_ago == 4 and warned == 0:
                 try:
                     await context.bot.send_message(
@@ -119,7 +121,7 @@ async def daily_check(context: ContextTypes.DEFAULT_TYPE):
                 except Exception as e:
                     log.warning(f"Warn failed {user_id}: {e}")
 
-            # Kick on day 5+
+            # Day 5: Kick
             if days_ago >= 5:
                 try:
                     await context.bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
@@ -134,6 +136,7 @@ async def daily_check(context: ContextTypes.DEFAULT_TYPE):
                 except Exception as e:
                     log.warning(f"Kick failed {user_id}: {e}")
 
+        # Post Lists
         if warn_list:
             await context.bot.send_message(
                 chat_id=chat_id,
@@ -167,39 +170,46 @@ async def any_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     record_message(user.id, chat.id)
 
-# --- BOT IN BACKGROUND THREAD ---
-def run_bot():
-    app = Application.builder().token(BOT_TOKEN).build()
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+    log.error("Error: %s", context.error)
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.ALL & filters.ChatType.GROUPS & ~filters.COMMAND, any_message))
-
-    # Daily job at 00:05 EAT (UTC+3 → 21:05 UTC)
-    app.job_queue.run_daily(
-        daily_check,
-        time=datetime.strptime("21:05", "%H:%M").time()
-    )
-
-    print("Bot polling started...")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
-
-# --- FLASK SERVER (Port 10000) ---
+# --- FLASK SERVER (Binds to PORT 10000 FIRST) ---
 flask_app = Flask(__name__)
 
 @flask_app.route('/', defaults={'path': ''})
 @flask_app.route('/<path:path>')
-def home(path):
+def catch_all(path):
     return "Sirul Member Control Bot is LIVE!", 200
 
 # --- MAIN ---
-if __name__ == "__main__":
+def main():
     init_db()
+    app = Application.builder().token(BOT_TOKEN).build()
 
-    # Start bot in background
-    bot_thread = threading.Thread(target=run_bot, daemon=True)
-    bot_thread.start()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.ALL & filters.ChatType.GROUPS & ~filters.COMMAND, any_message))
+    app.add_error_handler(error_handler)
 
-    # Start Flask (keeps Render alive)
-    port = int(os.environ.get("PORT", 10000))
-    print(f"Flask starting on port {port}...")
-    flask_app.run(host="0.0.0.0", port=port)
+    # Daily job at 00:05 UTC
+    app.job_queue.run_daily(
+        callback=daily_check,
+        time=datetime.strptime("00:05", "%H:%M").time(),
+        name="daily_inactivity_check"
+    )
+
+    print("Bot is running! Add to any group as admin.")
+
+    # Start bot polling
+    app.run_polling(
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=True,
+        read_timeout=10,
+        write_timeout=10,
+        connect_timeout=10,
+        pool_timeout=10
+    )
+
+if __name__ == "__main__":
+    port = int(os.environ.get('PORT', 10000))
+    print(f"Starting Flask on port {port}...")
+    flask_app.run(host='0.0.0.0', port=port, debug=False)
