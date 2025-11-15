@@ -85,7 +85,7 @@ def delete_user(user_id: int, chat_id: int):
     conn.commit()
     conn.close()
 
-# --- DAILY CHECK (00:05 UTC) ---
+# --- DAILY CHECK ---
 async def daily_check(context: ContextTypes.DEFAULT_TYPE):
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
@@ -174,7 +174,7 @@ async def any_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     log.error("Error: %s", context.error)
 
-# --- FLASK DUMMY SERVER (Port 10000 for Render Scan) ---
+# --- FLASK DUMMY SERVER (Port 10000) ---
 flask_app = Flask(__name__)
 
 @flask_app.route('/', defaults={'path': ''})
@@ -182,7 +182,7 @@ flask_app = Flask(__name__)
 def catch_all(path):
     return "Sirul Member Control Bot is LIVE!", 200
 
-# --- MAIN (Flask + Bot in Thread) ---
+# --- MAIN (Flask + Bot Thread) ---
 def run_bot():
     app = Application.builder().token(BOT_TOKEN).build()
 
@@ -197,17 +197,17 @@ def run_bot():
         name="daily_inactivity_check"
     )
 
-    print("Bot polling started in background...")
-    app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+    print("Bot polling started...")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     init_db()
 
-    # Start bot in background thread
+    # Start bot thread
     bot_thread = threading.Thread(target=run_bot, daemon=True)
     bot_thread.start()
 
-    # Start Flask on Render port (passes scan)
+    # Start Flask
     port = int(os.environ.get('PORT', 10000))
     print(f"Flask starting on port {port}...")
     flask_app.run(host='0.0.0.0', port=port, debug=False)
