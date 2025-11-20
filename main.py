@@ -69,8 +69,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     if chat.type in ["group", "supergroup"]:
         await update.message.reply_text(
-            "Sirul Member Control is **ACTIVE**!\n"
-            "• Warns after **4 days** of no messages\n"
+            "Sirul Wujud Member Control is **ACTIVE**!\n"
+            "• Warns after **4 days** of no selewat reports\n"
             "• Removes after **5 days**",
             parse_mode="Markdown"
         )
