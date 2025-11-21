@@ -1,5 +1,5 @@
-# main.py - Sirul Member Control Bot (FREE RENDER HOBBY - FINAL FIX)
-# Flask in main (binds port 10000) + Bot polling in thread
+# main.py - Sirul Member Control Bot (FREE RENDER - FINAL WORKING)
+# Flask in main + Bot in thread + Fixed filters
 
 import os
 import sqlite3
@@ -59,10 +59,71 @@ def record_message(user_id: int, chat_id: int):
     conn.commit()
     conn.close()
 
-# --- DAILY CHECK ---
+# --- FULL DAILY CHECK (00:05 UTC) ---
 async def daily_check(context: ContextTypes.DEFAULT_TYPE):
-    # Your full daily_check function here (warn day 4, kick day 5)
-    pass  # Copy your full function
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+    cur.execute("SELECT DISTINCT chat_id FROM activity")
+    chat_ids = [row[0] for row in cur.fetchall()]
+    conn.close()
+
+    today = date.today()
+
+    for chat_id in chat_ids:
+        if chat_id >= 0:  # Skip private chats
+            continue
+
+        rows = get_all_in_chat(chat_id)
+        warn_list: List[str] = []
+        kick_list: List[str] = []
+
+        for user_id, last_msg_str, warned in rows:
+            last_msg = date.fromisoformat(last_msg_str)
+            days_ago = (today - last_msg).days
+
+            # Day 4: Warning
+            if days_ago == 4 and warned == 0:
+                try:
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text="Warning: You haven't submitted selewat report in 4 days.\n"
+                             "Submit today or you will be removed tomorrow."
+                    )
+                    set_warned(user_id, chat_id)
+                    member = await context.bot.get_chat_member(chat_id, user_id)
+                    name = member.user.full_name or f"User {user_id}"
+                    warn_list.append(name)
+                except Exception as e:
+                    log.warning(f"Warn failed {user_id}: {e}")
+
+            # Day 5: Kick
+            if days_ago >= 5:
+                try:
+                    await context.bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
+                    delete_user(user_id, chat_id)
+                    name = f"User {user_id}"
+                    try:
+                        member = await context.bot.get_chat_member(chat_id, user_id)
+                        name = member.user.full_name
+                    except:
+                        pass
+                    kick_list.append(name)
+                except Exception as e:
+                    log.warning(f"Kick failed {user_id}: {e}")
+
+        # Post Lists
+        if warn_list:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="**Warning: 4 Days No Selewat Report**\n" + "\n".join(f"• {n}" for n in warn_list),
+                parse_mode="Markdown"
+            )
+        if kick_list:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="**Removed: 5 Days No Selewat Report**\n" + "\n".join(f"• {n}" for n in kick_list),
+                parse_mode="Markdown"
+            )
 
 # --- HANDLERS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -77,6 +138,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Add me to a group and make me admin!")
 
+# FIXED: Use TEXT + MEDIA to avoid service messages
 async def any_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     user = update.effective_user
@@ -87,13 +149,25 @@ async def any_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- BOT IN THREAD ---
 def run_bot():
     app = Application.builder().token(BOT_TOKEN).build()
+
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.ALL & filters.ChatType.GROUPS & ~filters.COMMAND, any_message))
-    app.job_queue.run_daily(daily_check, time=datetime.strptime("00:05", "%H:%M").time())
+    # FIXED FILTER: TEXT + MEDIA (no service messages)
+    app.add_handler(MessageHandler(
+        (filters.TEXT | filters.PHOTO | filters.VIDEO | filters.DOCUMENT | filters.STICKER | filters.AUDIO | filters.VOICE | filters.VIDEO_NOTE) & filters.ChatType.GROUPS,
+        any_message
+    ))
+
+    # Daily job at 00:05 UTC
+    app.job_queue.run_daily(
+        callback=daily_check,
+        time=datetime.strptime("00:05", "%H:%M").time(),
+        name="daily_selewat_check"
+    )
+
     print("Bot polling started...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
-# --- FLASK SERVER (Port 10000) ---
+# --- FLASK SERVER ---
 flask_app = Flask(__name__)
 
 @flask_app.route('/', defaults={'path': ''})
@@ -109,7 +183,7 @@ if __name__ == "__main__":
     bot_thread = threading.Thread(target=run_bot, daemon=True)
     bot_thread.start()
 
-    # Start Flask in main thread (keeps Render alive)
+    # Start Flask in main thread
     port = int(os.environ.get("PORT", 10000))
-    print(f"Flask started on port {port} (Render alive)")
+    print(f"Flask started on port {port}...")
     flask_app.run(host="0.0.0.0", port=port, use_reloader=False)
