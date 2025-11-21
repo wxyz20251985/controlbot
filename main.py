@@ -61,21 +61,9 @@ def record_message(user_id: int, chat_id: int):
 
 # --- FULL DAILY CHECK (00:05 UTC) ---
 async def daily_check(context: ContextTypes.DEFAULT_TYPE):
-    conn = sqlite3.connect(DB_FILE)
-    cur = conn.cursor()
-    cur.execute("SELECT DISTINCT chat_id FROM activity")
-    chat_ids = [row[0] for row in cur.fetchall()]
-    conn.close()
-
-    today = date.today()
-
-    for chat_id in chat_ids:
-        if chat_id >= 0:
-            continue
-
-        # Your full warn/kick logic here (warn day 4, kick day 5)
-        # ... (copy from your code)
-        pass
+    # Your full daily_check function here (warn day 4, kick day 5)
+    # ... (copy from your code)
+    pass
 
 # --- HANDLERS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -105,7 +93,7 @@ flask_app = Flask(__name__)
 def home(path):
     return "Sirul Member Control Bot is LIVE!", 200
 
-# --- MAIN (Flask + Bot polling in main thread) ---
+# --- MAIN ---
 if __name__ == "__main__":
     init_db()
 
