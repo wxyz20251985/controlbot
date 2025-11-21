@@ -4,7 +4,6 @@
 import os
 import sqlite3
 import logging
-import asyncio
 from datetime import date, datetime
 from typing import List
 
@@ -101,16 +100,13 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     print(f"Flask started on port {port}...")
 
-    # Run bot polling in async main
-    async def run_bot():
-        app = Application.builder().token(BOT_TOKEN).build()
-        app.add_handler(CommandHandler("start", start))
-        app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, any_message))
-        app.job_queue.run_daily(daily_check, time=datetime.strptime("00:05", "%H:%M").time())
-        print("Bot polling started...")
-        await app.run_polling(allowed_updates=Update.ALL_TYPES)
-
-    asyncio.run(run_bot())
+    # Run bot polling in main thread
+    app = Application.builder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, any_message))
+    app.job_queue.run_daily(daily_check, time=datetime.strptime("00:05", "%H:%M").time())
+    print("Bot polling started...")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
 
     # Flask never reached (polling is infinite) — Render sees Flask startup → passes port scan
     flask_app.run(host="0.0.0.0", port=port, use_reloader=False)
