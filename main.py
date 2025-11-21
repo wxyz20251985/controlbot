@@ -1,5 +1,5 @@
-# main.py - Sirul Member Control Bot (FREE RENDER - 100% WORKING)
-# Flask in main (keeps Render alive) + Bot polling in thread
+# main.py - Sirul Member Control Bot (FREE RENDER HOBBY - 100% WORKING)
+# Flask in main + Bot polling in thread (same as your working selewat bot)
 
 import os
 import sqlite3
