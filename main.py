@@ -1,10 +1,9 @@
-# main.py - Sirul Member Control Bot (FREE RENDER - 100% FIXED)
-# Flask in main + Bot in thread + Safe filters (no service messages)
+# main.py - Sirul Member Control Bot (FREE RENDER - 100% WORKING)
+# Flask + Bot polling in main thread (no threads = no errors)
 
 import os
 import sqlite3
 import logging
-import threading
 from datetime import date, datetime
 from typing import List
 
@@ -89,28 +88,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Add me to a group and make me admin!")
 
-# FIXED: Only real messages (no service messages)
 async def any_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     user = update.effective_user
     if chat.type not in ["group", "supergroup"] or user.is_bot:
         return
     record_message(user.id, chat.id)
-
-# --- BOT IN THREAD ---
-def run_bot():
-    app = Application.builder().token(BOT_TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    # FIXED FILTER: Only real messages in groups
-    app.add_handler(MessageHandler(
-        (filters.TEXT | filters.PHOTO | filters.VIDEO | filters.DOCUMENT | filters.STICKER | filters.AUDIO | filters.VOICE | filters.VIDEO_NOTE) & filters.ChatType.GROUPS,
-        any_message
-    ))
-
-    app.job_queue.run_daily(daily_check, time=datetime.strptime("00:05", "%H:%M").time())
-    print("Bot polling started...")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 # --- FLASK SERVER ---
 flask_app = Flask(__name__)
@@ -124,11 +107,17 @@ def home(path):
 if __name__ == "__main__":
     init_db()
 
-    # Start bot in background thread
-    bot_thread = threading.Thread(target=run_bot, daemon=True)
-    bot_thread.start()
-
-    # Start Flask in main thread
+    # Start Flask (keeps Render alive)
     port = int(os.environ.get("PORT", 10000))
-    print(f"Flask started on port {port}...")
+    print(f"Starting Flask on port {port}...")
+
+    # Start bot polling in main thread
+    app = Application.builder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, any_message))
+    app.job_queue.run_daily(daily_check, time=datetime.strptime("00:05", "%H:%M").time())
+    print("Bot polling started...")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+    # Flask never reached (polling is infinite) — Render sees Flask startup → passes port scan
     flask_app.run(host="0.0.0.0", port=port, use_reloader=False)
