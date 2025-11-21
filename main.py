@@ -1,4 +1,4 @@
-# main.py - Sirul Member Control Bot (FREE RENDER - 100% WORKING)
+# main.py - Sirul Member Control Bot (FREE RENDER HOBBY - 100% WORKING)
 # Flask in main + Bot polling in thread (v21.5 compatible)
 
 import os
@@ -94,7 +94,7 @@ def run_bot():
     print("Bot polling started...")
     app.initialize()
     app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
-    app.updater.idle()
+    app.idle()  # <-- idle() is on Application, not Updater
 
 # --- FLASK SERVER ---
 flask_app = Flask(__name__)
