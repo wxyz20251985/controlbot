@@ -29,7 +29,7 @@ DB_FILE = "inactivity.db"
 # --- LOGGING ---
 logging.basicConfig(level=logging.INFO)
 
-# --- DATABASE (same as before) ---
+# --- DATABASE ---
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
@@ -88,12 +88,9 @@ async def any_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- BOT IN THREAD (v21.5 compatible) ---
 def run_bot():
     app = Application.builder().token(BOT_TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, any_message))
-
     app.job_queue.run_daily(daily_check, time=datetime.strptime("00:05", "%H:%M").time())
-
     print("Bot polling started...")
     app.initialize()
     app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
