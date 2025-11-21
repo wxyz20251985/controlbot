@@ -1,10 +1,10 @@
 # main.py - Sirul Member Control Bot (FREE RENDER HOBBY - 100% WORKING)
-# Flask in main + Bot polling in thread (v21.5 compatible)
+# Flask in main + async bot polling (v21.5 correct way)
 
 import os
 import sqlite3
 import logging
-import threading
+import asyncio
 from datetime import date, datetime
 from typing import List
 
@@ -85,17 +85,6 @@ async def any_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     record_message(user.id, chat.id)
 
-# --- BOT IN THREAD (v21.5 compatible) ---
-def run_bot():
-    app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, any_message))
-    app.job_queue.run_daily(daily_check, time=datetime.strptime("00:05", "%H:%M").time())
-    print("Bot polling started...")
-    app.initialize()
-    app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
-    app.idle()  # <-- idle() is on Application, not Updater
-
 # --- FLASK SERVER ---
 flask_app = Flask(__name__)
 
@@ -104,15 +93,24 @@ flask_app = Flask(__name__)
 def home(path):
     return "Sirul Member Control Bot is LIVE!", 200
 
-# --- MAIN ---
+# --- MAIN (async + Flask) ---
+async def run_bot():
+    app = Application.builder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, any_message))
+    app.job_queue.run_daily(daily_check, time=datetime.strptime("00:05", "%H:%M").time())
+    print("Bot polling started...")
+    await app.run_polling(allowed_updates=Update.ALL_TYPES)
+
 if __name__ == "__main__":
     init_db()
 
-    # Start bot in background thread
-    bot_thread = threading.Thread(target=run_bot, daemon=True)
-    bot_thread.start()
-
-    # Start Flask in main thread
+    # Start Flask in main thread (keeps Render alive)
     port = int(os.environ.get("PORT", 10000))
     print(f"Flask started on port {port}...")
+
+    # Run bot polling in async main
+    asyncio.run(run_bot())
+
+    # Flask never reached (polling is infinite)
     flask_app.run(host="0.0.0.0", port=port, use_reloader=False)
