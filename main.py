@@ -5,10 +5,6 @@ import os
 import sqlite3
 import logging
 import threading
-import asyncio
-import nest_asyncio
-nest_asyncio.apply()  # This fixes the thread event loop error
-
 from datetime import date, datetime
 from typing import List
 
@@ -89,8 +85,10 @@ async def any_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     record_message(user.id, chat.id)
 
-# --- BOT IN THREAD (WITH nest_asyncio FIX) ---
+# --- BOT IN THREAD (nest_asyncio fix) ---
 def run_bot():
+    import nest_asyncio
+    nest_asyncio.apply()  # Fix event loop in thread
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, any_message))
@@ -114,6 +112,6 @@ if __name__ == "__main__":
     bot_thread = threading.Thread(target=run_bot, daemon=True)
     bot_thread.start()
 
-    # Start Flask with gunicorn (Render loves this)
+    # Start gunicorn in main thread (keeps Render alive)
     print("Starting gunicorn server...")
     os.system("gunicorn --bind 0.0.0.0:$PORT main:flask_app")
