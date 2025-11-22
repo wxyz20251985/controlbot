@@ -1,13 +1,10 @@
 # main.py - Sirul Member Control Bot (FREE RENDER HOBBY - 100% WORKING)
-# Flask + Bot polling in main thread + nest_asyncio fix
+# gunicorn + Flask in main + Bot in thread (same as your working selewat bot)
 
 import os
 import sqlite3
 import logging
-import asyncio
-import nest_asyncio
-nest_asyncio.apply()  # <-- THIS FIXES "event loop is already running"
-
+import threading
 from datetime import date, datetime
 from typing import List
 
@@ -88,6 +85,15 @@ async def any_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     record_message(user.id, chat.id)
 
+# --- BOT IN THREAD ---
+def run_bot():
+    app = Application.builder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, any_message))
+    app.job_queue.run_daily(daily_check, time=datetime.strptime("00:05", "%H:%M").time())
+    print("Bot polling started...")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
+
 # --- FLASK SERVER ---
 flask_app = Flask(__name__)
 
@@ -100,20 +106,11 @@ def home(path):
 if __name__ == "__main__":
     init_db()
 
-    # Start Flask (keeps Render alive)
-    port = int(os.environ.get("PORT", 10000))
-    print(f"Flask started on port {port}...")
+    # Start bot in background thread
+    bot_thread = threading.Thread(target=run_bot, daemon=True)
+    bot_thread.start()
 
-    # Run bot polling in async main
-    async def run_bot():
-        app = Application.builder().token(BOT_TOKEN).build()
-        app.add_handler(CommandHandler("start", start))
-        app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, any_message))
-        app.job_queue.run_daily(daily_check, time=datetime.strptime("00:05", "%H:%M").time())
-        print("Bot polling started...")
-        await app.run_polling(allowed_updates=Update.ALL_TYPES)
-
-    asyncio.run(run_bot())
-
-    # Flask never reached (polling is infinite) — Render sees Flask startup → passes port scan
-    flask_app.run(host="0.0.0.0", port=port, use_reloader=False)
+    # Start Flask with gunicorn (Render loves this)
+    print("Flask started with gunicorn...")
+    from gunicorn.app.wsgiapp import run as run_gunicorn
+    os.system("gunicorn --bind 0.0.0.0:$PORT main:flask_app")
