@@ -1,10 +1,14 @@
 # main.py - Sirul Member Control Bot (FREE RENDER HOBBY - 100% WORKING)
-# gunicorn + Flask in main + Bot in thread (same as your working selewat bot)
+# gunicorn + Flask in main + Bot in thread with nest_asyncio
 
 import os
 import sqlite3
 import logging
 import threading
+import asyncio
+import nest_asyncio
+nest_asyncio.apply()  # This fixes the thread event loop error
+
 from datetime import date, datetime
 from typing import List
 
@@ -85,7 +89,7 @@ async def any_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     record_message(user.id, chat.id)
 
-# --- BOT IN THREAD ---
+# --- BOT IN THREAD (WITH nest_asyncio FIX) ---
 def run_bot():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
@@ -111,6 +115,5 @@ if __name__ == "__main__":
     bot_thread.start()
 
     # Start Flask with gunicorn (Render loves this)
-    print("Flask started with gunicorn...")
-    from gunicorn.app.wsgiapp import run as run_gunicorn
+    print("Starting gunicorn server...")
     os.system("gunicorn --bind 0.0.0.0:$PORT main:flask_app")
