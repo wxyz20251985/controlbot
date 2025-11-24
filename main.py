@@ -6,7 +6,7 @@ import sqlite3
 import logging
 import threading
 import nest_asyncio
-nest_asyncio.apply()  # <-- THIS FIXES ALL EVENT LOOP ERRORS IN THREAD
+nest_asyncio.apply()  # Fix event loop in thread
 
 from datetime import date, datetime
 from typing import List
@@ -88,7 +88,7 @@ async def any_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     record_message(user.id, chat.id)
 
-# --- BOT IN THREAD (nest_asyncio fix) ---
+# --- BOT IN THREAD ---
 def run_bot():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
@@ -114,6 +114,5 @@ if __name__ == "__main__":
     bot_thread.start()
 
     # Start gunicorn in main thread
-    port = int(os.environ.get("PORT", 10000))
-    print(f"Starting gunicorn on port {port}...")
-    os.system(f"gunicorn --bind 0.0.0.0:{port} main:flask_app")
+    print("Starting gunicorn server...")
+    os.system("gunicorn --bind 0.0.0.0:$PORT main:flask_app")
