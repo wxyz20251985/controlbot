@@ -1,4 +1,4 @@
-# main.py - Sirul Member Control Bot (FREE RENDER HOBBY - 100% WORKING)
+# main.py - Sirul Member Control Bot (FREE RENDER - 100% WORKING 24/7)
 # gunicorn + Flask in main + Bot in thread with nest_asyncio
 
 import os
@@ -113,6 +113,6 @@ if __name__ == "__main__":
     bot_thread = threading.Thread(target=run_bot, daemon=True)
     bot_thread.start()
 
-    # Start gunicorn in main thread
+    # Start gunicorn in main thread (keeps Render alive)
     print("Starting gunicorn server...")
     os.system("gunicorn --bind 0.0.0.0:$PORT main:flask_app")
