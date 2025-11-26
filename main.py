@@ -4,6 +4,7 @@
 import os
 import sqlite3
 import logging
+import threading
 import asyncio
 import urllib.request
 from datetime import date, datetime
@@ -96,10 +97,15 @@ flask_app = Flask(__name__)
 def home(path):
     return "Sirul Member Control Bot is LIVE!", 200
 
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    print(f"Flask server started on port {port}")
+    flask_app.run(host="0.0.0.0", port=port, use_reloader=False)
+
 # --- KEEP-ALIVE ---
 async def keep_alive():
     while True:
-        await asyncio.sleep(300)  # Every 5 min
+        await asyncio.sleep(300)  # Every 5 minutes
         try:
             urllib.request.urlopen(WEB_URL, timeout=10)
             logger.info("PING: Keep-alive sent")
@@ -115,14 +121,9 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, any_message))
     app.job_queue.run_daily(daily_check, time=datetime.strptime("00:05", "%H:%M").time())
 
-    # Start keep-alive
+    # Start Flask + keep-alive in background threads
+    threading.Thread(target=run_flask, daemon=True).start()
     threading.Thread(target=lambda: asyncio.run(keep_alive()), daemon=True).start()
 
-    # Start Flask (Render sees this)
-    print("Starting Flask server...")
-    port = int(os.environ.get("PORT", 10000))
-    flask_app.run(host="0.0.0.0", port=port, use_reloader=False)
-
-    # Bot polling in main thread
-    print("Bot polling started...")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    print("Bot is running! Add to any group as admin.")
+    app.run_polling(drop_pending_updates=True)
